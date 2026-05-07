@@ -97,25 +97,26 @@ def generate_comments_batch(articles: List[Dict], product_url: str,
         for i, a in enumerate(articles)
     ])
 
-    sys_prompt = """你是CSDN技术社区的真实开发者用户，擅长在技术讨论中写评论。
+    sys_prompt = """你是CSDN技术社区的真实开发者用户。
 要求：
 1. 每条评论 50-500 字
 2. 与对应文章内容相关，像真实开发者
-3. 产品信息只能隐晦提及（如："之前做过类似的项目提到过..."，切勿直接推广）
+3. 产品链接必须放在正文中间自然融入（不要单独一行，不要"点这里"）
 4. 不同文章的评论要不同
 5. 风格多样：技术补充、经验分享、提问讨论"""
 
     prompt = f"""请为以下{len(articles)}篇CSDN文章生成评论。
 
-产品信息（隐晦提及，切勿直接推广）：
-- 名称：{product_name or "未指定"}
+产品链接（必须自然融入正文，不要单独放末尾）：
+- 名称：{product_name or "产品"}
+- 链接：{product_url}
 
 文章列表：
 {articles_text}
 
 输出JSON数组：
 [
-  {{"article_url": "文章链接", "comment": "评论内容（50-500字）"}}
+  {{"article_url": "文章链接", "comment": "评论内容（50-500字，产品链接自然融入正文中间）"}}
 ]
 """
 
