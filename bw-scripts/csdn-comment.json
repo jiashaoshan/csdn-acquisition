@@ -1,0 +1,200 @@
+{
+    "id": "23d2a4a9-97d2-4d9c-821b-9ec2e2dd07f7",
+    "name": "CSDN\u6587\u7ae0\u8bc4\u8bba",
+    "description": "CSDN\u6587\u7ae0\u8bc4\u8bba",
+    "url": "${\u94fe\u63a5}",
+    "actions": [
+        {
+            "type": "click",
+            "timestamp": 1778141970221,
+            "selector": "a",
+            "xpath": "//*[@id=\"toolBarBox\"]/div/div[2]/ul/li[4]/a",
+            "value": "",
+            "url": "",
+            "duration": 0,
+            "x": 1115,
+            "y": 868,
+            "text": "1",
+            "tag_name": "",
+            "attrs": null,
+            "intent": {
+                "verb": "click",
+                "object": "1"
+            },
+            "accessibility": {
+                "role": "link",
+                "name": "1"
+            },
+            "context": {
+                "nearby_text": [
+                    "14",
+                    "\u8bc4\u8bba",
+                    "\u5206\u4eab",
+                    "<a>"
+                ],
+                "ancestor_tags": [
+                    "li",
+                    "ul",
+                    "div",
+                    "div",
+                    "div",
+                    "main",
+                    "div",
+                    "div",
+                    "body"
+                ]
+            },
+            "evidence": {
+                "confidence": 0.7
+            }
+        },
+        {
+            "type": "sleep",
+            "timestamp": 1778141970222,
+            "selector": "",
+            "xpath": "",
+            "value": "",
+            "url": "",
+            "duration": 1452,
+            "x": 0,
+            "y": 0,
+            "text": "",
+            "tag_name": "",
+            "attrs": null,
+            "description": "\u81ea\u52a8\u7b49\u5f85 1.5 \u79d2"
+        },
+        {
+            "type": "input",
+            "timestamp": 1778141974578,
+            "selector": "#comment_content",
+            "xpath": "//*[@id=\"comment_content\"]",
+            "value": "${\u5185\u5bb9}",
+            "url": "",
+            "duration": 0,
+            "x": 0,
+            "y": 0,
+            "text": "",
+            "tag_name": "",
+            "attrs": null,
+            "intent": {
+                "verb": "input",
+                "object": "\u6b22\u8fce\u9ad8\u8d28\u91cf\u7684\u8bc4\u8bba\uff0c\u4f4e\u8d28\u7684\u8bc4\u8bba\u4f1a\u88ab\u6298\u53e0"
+            },
+            "accessibility": {
+                "role": "textbox",
+                "name": "\u6b22\u8fce\u9ad8\u8d28\u91cf\u7684\u8bc4\u8bba\uff0c\u4f4e\u8d28\u7684\u8bc4\u8bba\u4f1a\u88ab\u6298\u53e0",
+                "value": "12345"
+            },
+            "context": {
+                "nearby_text": [
+                    "\u6293\u53d6",
+                    "\u622a\u56fe"
+                ],
+                "ancestor_tags": [
+                    "form",
+                    "div",
+                    "div",
+                    "div",
+                    "div",
+                    "body"
+                ],
+                "form_hint": "generic"
+            },
+            "evidence": {
+                "confidence": 0.95
+            }
+        },
+        {
+            "type": "sleep",
+            "timestamp": 1778141974579,
+            "selector": "",
+            "xpath": "",
+            "value": "",
+            "url": "",
+            "duration": 1497,
+            "x": 0,
+            "y": 0,
+            "text": "",
+            "tag_name": "",
+            "attrs": null,
+            "description": "\u81ea\u52a8\u7b49\u5f85 1.5 \u79d2"
+        },
+        {
+            "type": "click",
+            "timestamp": 1778141982554,
+            "selector": "input.btn-comment.btn-comment-input[type=\"submit\"]",
+            "xpath": "//*[@id=\"commentform\"]/div[2]/div[3]/div[4]/a/input",
+            "value": "",
+            "url": "",
+            "duration": 0,
+            "x": 1341,
+            "y": 214,
+            "text": "",
+            "tag_name": "",
+            "attrs": null,
+            "intent": {
+                "verb": "click",
+                "object": "\u8bc4\u8bba"
+            },
+            "accessibility": {
+                "role": "button",
+                "name": "\u8bc4\u8bba",
+                "value": "\u8bc4\u8bba"
+            },
+            "context": {
+                "nearby_text": [
+                    "1",
+                    "\u539f\u521b",
+                    "\u5173\u6ce8"
+                ],
+                "ancestor_tags": [
+                    "a",
+                    "div",
+                    "div",
+                    "div",
+                    "form",
+                    "div",
+                    "div",
+                    "div",
+                    "div",
+                    "body"
+                ],
+                "form_hint": "generic"
+            },
+            "evidence": {
+                "confidence": 0.7
+            }
+        },
+        {
+            "type": "sleep",
+            "timestamp": 1778142125200,
+            "selector": "",
+            "xpath": "",
+            "value": "",
+            "url": "",
+            "duration": 2021,
+            "x": 0,
+            "y": 0,
+            "text": "",
+            "tag_name": "",
+            "attrs": null,
+            "description": "\u81ea\u52a8\u7b49\u5f85 1.5 \u79d2"
+        }
+    ],
+    "created_at": "2026-05-07T16:20:07.590258+08:00",
+    "updated_at": "2026-05-07T16:57:13.043479+08:00",
+    "tags": null,
+    "group": "",
+    "duration": 154979,
+    "can_publish": false,
+    "can_fetch": false,
+    "requires_login": false,
+    "is_mcp_command": false,
+    "mcp_command_name": "",
+    "mcp_command_description": "",
+    "mcp_input_schema": null,
+    "variables": {
+        "\u5185\u5bb9": "\u5199\u7684\u597d",
+        "\u94fe\u63a5": "https://blog.csdn.net/"
+    }
+}
