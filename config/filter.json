@@ -1,10 +1,10 @@
 {
-  "_\u8bf4\u660e": "\u98ce\u63a7\u548c\u8fc7\u6ee4\u914d\u7f6e",
+  "_说明": "风控和过滤配置",
   "max_comments_per_run": 5,
   "max_comments_per_day": 20,
   "max_comments_per_hour": 5,
-  "base_interval_seconds": 30,
-  "jitter_ratio": 0.2,
+  "base_interval_seconds": 180,
+  "jitter_ratio": 0.3,
   "active_hours_start": 8,
   "active_hours_end": 23,
   "min_score_threshold": 60,

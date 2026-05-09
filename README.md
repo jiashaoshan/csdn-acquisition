@@ -8,7 +8,7 @@
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| 🎯 **评论区获客** | ✅ 可用 | 关键词搜索 → 文章列表 → AI评分 → 批量LLM评论 → BW评论 |
+| 🎯 **评论区获客** | ✅ 可用 | 关键词搜索 → 文章列表 → 批量LLM评论 → BW评论 |
 | 📝 **CSDN 文章发布** | ⏳ 待实现 | - |
 
 ---
@@ -56,7 +56,7 @@
       │               风格多样：赞同/补充/提问/经验分享
       ↓
 [5. 逐条评论] → BW 脚本逐条发表评论
-      │               反爬策略：30s 随机延迟抖动
+      │               反爬策略：180s 随机延迟抖动（可配置）
       │               每日上限 20 条 / 每小时 5 条
       ↓
 [6. 记录] → JSON 持久化已评论文章 base URL，避免重复
@@ -125,8 +125,8 @@ pip install requests
 | `max_comments_per_run` | 5 | 每次运行最多评论 |
 | `max_comments_per_day` | 20 | 每天评论上限 |
 | `max_comments_per_hour` | 5 | 每小时评论上限 |
-| `base_interval_seconds` | 30 | 评论间隔（秒） |
-| `jitter_ratio` | 0.2 | 抖动比例 |
+| `base_interval_seconds` | 180 | 评论间隔（秒） |
+| `jitter_ratio` | 0.3 | 抖动比例 |
 | `active_hours_start` | 8 | 活跃时段开始 |
 | `active_hours_end` | 23 | 活跃时段结束 |
 | `min_score_threshold` | 60 | 最低评分阈值 |
@@ -139,7 +139,7 @@ pip install requests
 ## 快速开始
 
 ```bash
-# 完整流程：生成关键词 → 搜索 → 评分 → 批量生成评论 → 逐条评论
+# 完整流程：生成关键词 → 搜索 → 过滤 → 批量生成评论 → 逐条评论
 python3 scripts/csdn_campaign.py \
   --acquire \
   --product-url "https://your-product.com" \
@@ -189,7 +189,7 @@ csdn-acquisition/
 │   ├── keywords.json                   ← 种子关键词
 │   └── filter.json                     ← 风控配置
 └── data/
-    └── commented-history.json          ← 评论历史（去重用）
+    └── commented-history.json          ← 评论历史（去重用，运行时生成）
 ```
 
 ---
