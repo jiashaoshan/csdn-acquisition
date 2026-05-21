@@ -1,0 +1,43 @@
+{
+    "id": "csdn-article-content-000000000000",
+    "name": "CSDN文章正文提取",
+    "description": "打开 CSDN 文章页面，滚动触发懒加载后提取文章标题和正文内容",
+    "url": "${链接}",
+    "actions": [
+        {
+            "type": "sleep",
+            "duration": 2500,
+            "_comment": "等待文章页面首次渲染"
+        },
+        {
+            "type": "scroll",
+            "scroll_y": 500,
+            "_comment": "小幅度滚动触发懒加载区域"
+        },
+        {
+            "type": "sleep",
+            "duration": 1000
+        },
+        {
+            "type": "scroll",
+            "scroll_y": 1000,
+            "_comment": "继续滚动加载更多内容"
+        },
+        {
+            "type": "sleep",
+            "duration": 1500
+        },
+        {
+            "type": "execute_js",
+            "js_code": "(() => {\n  const getText = (sel) => {\n    const el = document.querySelector(sel);\n    return el ? el.textContent.trim() : '';\n  };\n\n  // 多选择器降级：CSDN 不同版本/皮肤可能用不同的容器\n  let content = getText('#content_views');\n  if (!content || content.length < 100) {\n    content = getText('article.baidu_pl');\n  }\n  if (!content || content.length < 100) {\n    content = getText('#article_content');\n  }\n  if (!content || content.length < 100) {\n    content = getText('.article-detail');\n  }\n  if (!content || content.length < 100) {\n    // 最后尝试取 body 内文章区域\n    const main = document.querySelector('main') || document.querySelector('.main_content');\n    content = main ? main.textContent.trim() : '';\n  }\n\n  // 截取前 5000 字（足够 LLM 理解文章主旨，也避免 prompt 过长）\n  content = content.substring(0, 5000);\n\n  // 标题\n  const title = getText('#articleContentId') || getText('h1.title-article') || document.title || '';\n\n  return { title: title, content: content };\n})()"
+        },
+        {
+            "type": "sleep",
+            "duration": 500
+        }
+    ],
+    "_comment": "导入 BrowserWing 后请将 id 替换为系统分配的真实 UUID",
+    "variables": {
+        "链接": "https://blog.csdn.net/"
+    }
+}

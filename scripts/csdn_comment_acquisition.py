@@ -14,6 +14,7 @@ from csdn_llm import generate_keywords, generate_comments_batch
 BW_EXECUTOR_URL = os.getenv("BROWSERWING_EXECUTOR_URL", "http://127.0.0.1:8080")
 BW_SEARCH_SCRIPT_ID = "fd1119b5-2546-4791-8efb-76f7d865a1e1"
 BW_COMMENT_SCRIPT_ID = "23d2a4a9-97d2-4d9c-821b-9ec2e2dd07f7"
+BW_ARTICLE_CONTENT_SCRIPT_ID = "csdn-article-content-000000000000"  # 导入 bw-scripts/csdn-article-content.json 后替换为真实 UUID
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = os.path.dirname(SCRIPT_DIR)
@@ -82,6 +83,40 @@ def search_articles(keyword: str) -> List[Dict]:
         print(f"[ERROR] 搜索失败: {e}")
         return []
 
+
+def fetch_article_content(article_url: str, timeout: int = 20) -> dict:
+    """
+    调用 BW 脚本打开 CSDN 文章页，滚动触发懒加载后提取全文。
+    多个选择器降级兼容不同 CSDN 皮肤/版本。
+    
+    Returns:
+        dict: {"title": str, "content": str}, content 最多 5000 字
+        失败返回 {"title": "", "content": ""}
+    """
+    url = f"{BW_EXECUTOR_URL}/api/v1/scripts/{BW_ARTICLE_CONTENT_SCRIPT_ID}/play"
+    payload = {"params": {"链接": article_url}}
+    try:
+        resp = requests.post(url, headers={"Content-Type": "application/json"},
+                             json=payload, timeout=timeout)
+        resp.raise_for_status()
+        result = resp.json()
+        extracted = (result.get("result", {}) or {}).get("extracted_data", {}) or {}
+        data = extracted.get("js_result_0", {}) or {}
+        if not isinstance(data, dict):
+            data = {}
+        title = data.get("title", "").strip()
+        content = data.get("content", "").strip()
+        if content:
+            print(f"[INFO]   全文获取: {len(content)} 字")
+            return {"title": title, "content": content}
+        else:
+            print(f"[WARN]   全文获取失败，fallback 到搜索摘要")
+            return {"title": title, "content": ""}
+    except Exception as e:
+        print(f"[WARN]   文章内容获取异常: {e}，fallback 到搜索摘要")
+        return {"title": "", "content": ""}
+
+
 def comment_on_article(article_url: str, content: str, dry_run: bool = False) -> dict:
     """调用 BW 脚本发表评论（含反爬延迟）"""
     if dry_run:
@@ -110,10 +145,11 @@ def anti_scrape_delay(config: dict):
     time.sleep(delay)
 
 def check_rate_limit(history: list, config: dict) -> bool:
-    """检查是否超过速率限制"""
+    """检查是否超过速率限制（含日/小时上限 + 工作时段）"""
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
-    this_hour = now.strftime("%Y-%m-%d %H:00:00")
+    # commented_at 存的是 ISO 格式 "2026-05-21T14:35:22" 含 T，不是空格
+    this_hour = now.strftime("%Y-%m-%dT%H")
 
     today_count = sum(1 for h in history if h.get("commented_at", "").startswith(today))
     hour_count = sum(1 for h in history if h.get("commented_at", "").startswith(this_hour))
@@ -126,6 +162,14 @@ def check_rate_limit(history: list, config: dict) -> bool:
         return False
     if hour_count >= max_hour:
         print(f"[WARN] 本小时评论已达上限 ({max_hour})")
+        return False
+
+    # 工作时段检查
+    hour = now.hour
+    start = config.get("active_hours_start", 8)
+    end = config.get("active_hours_end", 23)
+    if hour < start or hour >= end:
+        print(f"[WARN] 不在工作时段内 ({start}:00-{end}:00)")
         return False
     return True
 
@@ -151,9 +195,14 @@ def acquire_comments(product_url: str, product_name: str = "",
     commented_bases = {_base_url(h.get("article_url", "")) for h in history}
     print(f"[INFO] 已评论 {len(commented_bases)} 篇（去追踪参数）")
 
-    # 3. 搜索
+    # 3. 搜索（含随机间隔避免触发 CSDN 反爬）
     all_articles = []
-    for kw in keywords[:3]:
+    search_kws = keywords[:3]  # 最多 3 个关键词
+    for i, kw in enumerate(search_kws):
+        if i > 0:
+            delay = random.uniform(5, 10)
+            print(f"[INFO] 搜索间隔 {delay:.1f} 秒...")
+            time.sleep(delay)
         articles = search_articles(kw)
         all_articles.extend(articles)
 
@@ -175,16 +224,27 @@ def acquire_comments(product_url: str, product_name: str = "",
     if not new_articles:
         return {"success": True, "total": 0, "comments": [], "message": "无新文章"}
 
-    # 5. 取评分最高的前 N 篇
+    # 5. 取候选文章 + 抓取全文（fallback 到搜索摘要）
     candidates = new_articles[:15]
-
-    # 6. 批量生成评论（一次LLM调用）
     articles_for_llm = []
-    for a in candidates[:max_comments]:
+    for i, a in enumerate(candidates[:max_comments]):
+        article_url = a.get("url", "") or a.get("link", "")
+        print(f"[INFO] 获取全文 [{i+1}/{min(max_comments, len(candidates))}]: {article_url[:60]}...")
+
+        full = {"title": a.get("title", ""), "content": ""}
+        if article_url:
+            # 非首篇文章间加延迟
+            if i > 0:
+                delay = random.uniform(3, 6)
+                print(f"[INFO]   文章间隔 {delay:.1f} 秒...")
+                time.sleep(delay)
+            full = fetch_article_content(article_url)
+
         articles_for_llm.append({
-            "title": a.get("title", ""),
-            "url": a.get("url", "") or a.get("link", ""),
-            "content": a.get("content", "") or a.get("desc", "") or "",
+            "title": full.get("title") or a.get("title", ""),
+            "url": article_url,
+            # 优先全文，fallback 到搜索摘要（最多 500 字，原先是 300）
+            "content": full.get("content") or a.get("content", "") or a.get("desc", "") or "",
         })
 
     print(f"[INFO] 批量生成 {len(articles_for_llm)} 条评论...")

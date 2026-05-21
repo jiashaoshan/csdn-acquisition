@@ -93,7 +93,7 @@ def generate_comments_batch(articles: List[Dict], product_url: str,
     def clean_url(u):
         return u.split("?")[0].split("#")[0].rstrip("/")
     articles_text = "\n\n".join([
-        f"--- 文章{i+1} ---\n标题：{a.get('title','')}\n链接：{clean_url(a.get('url',''))}\n摘要：{a.get('content','')[:300]}"
+        f"--- 文章{i+1} ---\n标题：{a.get('title','')}\n链接：{clean_url(a.get('url',''))}\n正文：{a.get('content','')[:2500]}"
         for i, a in enumerate(articles)
     ])
 
