@@ -10,5 +10,6 @@
   "min_score_threshold": 60,
   "comment_max_chars": 1000,
   "min_comment_length": 10,
+  "max_article_age_days": 30,
   "banned_keywords": []
 }

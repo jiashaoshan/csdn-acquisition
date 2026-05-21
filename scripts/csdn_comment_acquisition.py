@@ -173,6 +173,29 @@ def check_rate_limit(history: list, config: dict) -> bool:
         return False
     return True
 
+
+def filter_by_date(articles: list, max_age_days: int = 30) -> list:
+    """
+    过滤掉老旧文章，只保留最近 max_age_days 天内发布的。
+    CSDN 搜索结果的 createTime 字段格式如 "2026-05-15"。
+    无法解析日期的文章保留（保守策略）。
+    """
+    if not max_age_days or max_age_days <= 0:
+        return articles
+    cutoff = datetime.now() - timedelta(days=max_age_days)
+    kept = []
+    for a in articles:
+        raw = a.get("createTime", "") or ""
+        try:
+            article_date = datetime.strptime(raw.strip(), "%Y-%m-%d")
+            if article_date >= cutoff:
+                kept.append(a)
+            # else: 太旧，丢弃
+        except ValueError:
+            # 无法解析日期的保留
+            kept.append(a)
+    return kept
+
 def acquire_comments(product_url: str, product_name: str = "",
                      keywords: List[str] = None, max_comments: int = 5,
                      dry_run: bool = False) -> dict:
@@ -197,7 +220,7 @@ def acquire_comments(product_url: str, product_name: str = "",
 
     # 3. 搜索（含随机间隔避免触发 CSDN 反爬）
     all_articles = []
-    search_kws = keywords[:3]  # 最多 3 个关键词
+    search_kws = keywords[:5]  # 最多使用 5 个关键词（原为 3）
     for i, kw in enumerate(search_kws):
         if i > 0:
             delay = random.uniform(5, 10)
@@ -205,6 +228,7 @@ def acquire_comments(product_url: str, product_name: str = "",
             time.sleep(delay)
         articles = search_articles(kw)
         all_articles.extend(articles)
+    print(f"[INFO] 5 个关键词共搜到 {len(all_articles)} 篇")
 
     # 再次去重（不同关键词可能搜到同一篇）
     seen_bases = set()
@@ -216,8 +240,17 @@ def acquire_comments(product_url: str, product_name: str = "",
             unique_articles.append(a)
     print(f"[INFO] 去重后 {len(unique_articles)} 篇")
 
+    # 3.5 过滤老旧文章（默认 30 天内）
+    max_age = config.get("max_article_age_days", 30)
+    fresh_articles = filter_by_date(unique_articles, max_age)
+    dropped = len(unique_articles) - len(fresh_articles)
+    if dropped > 0:
+        print(f"[INFO] 过滤 {dropped} 篇老旧文章（超过 {max_age} 天），剩余 {len(fresh_articles)} 篇")
+    else:
+        print(f"[INFO] 文章均在 {max_age} 天内")
+
     # 4. 过滤已评论（用base URL）
-    new_articles = [a for a in unique_articles
+    new_articles = [a for a in fresh_articles
                     if (a.get("base_url", "") or _base_url(a.get("url", ""))) not in commented_bases]
     print(f"[INFO] 未评论 {len(new_articles)} 篇")
 
