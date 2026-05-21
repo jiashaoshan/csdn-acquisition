@@ -122,21 +122,100 @@ def generate_comments_batch(articles: List[Dict], product_url: str,
 
     try:
         resp = call_llm(prompt, sys_prompt, temperature=0.8, max_tokens=8000)
-        comments = json.loads(resp) if isinstance(json.loads(resp), list) else []
-        # 验证每条评论的 URL 匹配（取baseline部分对比，忽略追踪参数）
+        comments = _parse_llm_comments(resp)
+        print(f"[INFO] LLM 返回 {len(comments)} 条原始评论")
+
+        if not comments:
+            return []
+
+        # ── 多策略 URL 匹配 ──────────────────────────────
         def normalize_url(u):
-            return u.split("?")[0].split("#")[0].rstrip("/")
-        valid_bases = {normalize_url(a["url"]) for a in articles}
-        valid_urls = {a["url"] for a in articles}
+            return (u or "").split("?")[0].split("#")[0].rstrip("/")
+
+        def extract_article_id(u):
+            """从 CSDN URL 提取文章 ID，如 /details/161263908 → 161263908"""
+            m = re.search(r'/details/(\d+)', u)
+            return m.group(1) if m else ""
+
+        # 构建索引：article_id → 原始带参URL
+        article_id_map = {}
+        url_to_article = {}
+        for i, a in enumerate(articles):
+            original = a["url"]
+            nid = extract_article_id(original)
+            if nid:
+                article_id_map[nid] = original
+            url_to_article[normalize_url(original)] = original
+
         result = []
         for c in comments:
-            cu = normalize_url(c.get("article_url", ""))
-            if cu in valid_bases and len(c.get("comment", "")) > 10:
-                # 用原始URL（带参数）替换
-                matching = [u for u in valid_urls if normalize_url(u) == cu]
-                c["article_url"] = matching[0] if matching else cu
+            raw_url = c.get("article_url", "")
+            comment_text = c.get("comment", "")
+            cu = normalize_url(raw_url)
+            matched_url = None
+
+            # 策略1: 归一化 URL 精确匹配
+            if cu in url_to_article:
+                matched_url = url_to_article[cu]
+
+            # 策略2: 按文章 ID 匹配（忽略域名、路径前缀差异）
+            if not matched_url:
+                nid = extract_article_id(raw_url)
+                if nid and nid in article_id_map:
+                    matched_url = article_id_map[nid]
+
+            # 策略3: 位置回退（按评论顺序对应文章顺序）
+            if not matched_url and len(result) < len(articles):
+                matched_url = articles[len(result)]["url"]
+
+            if matched_url and len(comment_text) > 10:
+                c["article_url"] = matched_url
                 result.append(c)
+            else:
+                print(f"[WARN] 跳过评论: URL={raw_url[:50]}... match={'yes' if matched_url else 'no'} len={len(comment_text)}")
+
+        print(f"[INFO] URL 匹配后 {len(result)} 条有效评论")
         return result
     except Exception as e:
         print(f"[ERROR] Batch comment generation failed: {e}")
         return []
+
+
+def _parse_llm_comments(raw: str) -> list:
+    """
+    鲁棒解析 LLM 返回的评论 JSON。
+    处理 LLM 常见的格式问题：markdown 代码块包裹、dict 包装、JSONDecodeError。
+    """
+    text = raw.strip()
+
+    # 去掉 markdown 代码块包裹
+    m = re.match(r'```(?:json)?\s*\n(.*?)\n```', text, re.DOTALL)
+    if m:
+        text = m.group(1).strip()
+
+    # 直接解析
+    try:
+        data = json.loads(text)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            # LLM 可能包了一层：{"comments": [...]} 或直接在 values 里找列表
+            for v in data.values():
+                if isinstance(v, list):
+                    return v
+            # 包了一层对象，直接取这个对象（单条评论）
+            if "article_url" in data or "comment" in data:
+                return [data]
+    except (json.JSONDecodeError, Exception):
+        pass
+
+    # 正则兜底：提取 JSON 数组
+    m = re.search(r'\[.*\]', text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group())
+        except (json.JSONDecodeError, Exception):
+            pass
+
+    print(f"[WARN] 无法解析 LLM 返回的评论 JSON: {raw[:200]}...")
+    return []
