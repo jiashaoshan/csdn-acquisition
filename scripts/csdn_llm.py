@@ -1,50 +1,101 @@
 #!/usr/bin/env python3
 """
 CSDN 获客技能 - LLM API 封装
-基于 x-acquisition 的 x_llm.py 改造
+支持 DeepSeek (默认) 和 Baidu Qianfan 等多个 LLM 提供商
 """
 import os, sys, json, re, requests
 from typing import Optional, List, Dict, Any
 
-DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
-DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEFAULT_PROVIDER = "deepseek"
 
-def _resolve_api_key() -> str:
-    key = os.environ.get("DEEPSEEK_API_KEY")
-    if key:
-        return key
-    cfg = os.path.expanduser("~/.openclaw/openclaw.json")
-    if os.path.exists(cfg):
-        import json
-        with open(cfg) as f:
-            env = json.load(f).get("env", {})
-            if isinstance(env, dict):
-                key = env.get("DEEPSEEK_API_KEY", "")
-                if key:
-                    return key
-    raise ValueError("DEEPSEEK_API_KEY not set")
+
+def _load_providers() -> dict:
+    """从 openclaw.json 加载所有 LLM 提供商配置"""
+    cfg_path = os.path.expanduser("~/.openclaw/openclaw.json")
+    if not os.path.exists(cfg_path):
+        return {}
+    with open(cfg_path) as f:
+        cfg = json.load(f)
+    providers = cfg.get("models", {}).get("providers", {})
+    if isinstance(providers, dict):
+        return providers
+    return {}
+
+
+def _resolve_provider_config(provider: str) -> dict:
+    """解析指定提供商的 API 配置"""
+    # 先查 openclaw.json
+    providers = _load_providers()
+    if provider in providers:
+        p = providers[provider]
+        model_list = p.get("models", [])
+        model_id = model_list[0]["id"] if model_list else ""
+        return {
+            "base_url": p["baseUrl"].rstrip("/"),
+            "api_key": p["apiKey"],
+            "model": model_id,
+        }
+
+    # DeepSeek 回退
+    if provider == "deepseek":
+        key = os.environ.get("DEEPSEEK_API_KEY")
+        if not key:
+            cfg = os.path.expanduser("~/.openclaw/openclaw.json")
+            if os.path.exists(cfg):
+                with open(cfg) as f:
+                    env = json.load(f).get("env", {})
+                    if isinstance(env, dict):
+                        key = env.get("DEEPSEEK_API_KEY", "")
+        if key:
+            return {
+                "base_url": "https://api.deepseek.com",
+                "api_key": key,
+                "model": "deepseek-v4-flash",
+            }
+        raise ValueError("DEEPSEEK_API_KEY not set")
+
+    raise ValueError(f"Unknown LLM provider: {provider}")
+
+
+def list_providers() -> List[str]:
+    """列出所有可用 LLM 提供商"""
+    providers = _load_providers()
+    names = list(providers.keys())
+    if "deepseek" not in names:
+        names.insert(0, "deepseek")
+    return names
 
 
 def call_llm(prompt: str, system_prompt: Optional[str] = None,
-             temperature: float = 0.7, max_tokens: int = 4000) -> str:
-    api_key = _resolve_api_key()
+             temperature: float = 0.7, max_tokens: int = 4000,
+             provider: str = DEFAULT_PROVIDER) -> str:
+    cfg = _resolve_provider_config(provider)
 
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    payload = {"model": DEEPSEEK_MODEL, "messages": messages,
-               "temperature": temperature, "max_tokens": max_tokens}
+    url = f"{cfg['base_url']}/chat/completions"
+    payload = {
+        "model": cfg["model"],
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+
     try:
-        resp = requests.post(DEEPSEEK_API_URL,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        resp = requests.post(url,
+            headers={"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"},
             json=payload, timeout=120)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        print(f"[ERROR] LLM call failed: {e}")
+        print(f"[ERROR] LLM call failed ({provider}): {e}")
+        if resp.text:
+            print(f"[ERROR] Response: {resp.text[:300]}")
         raise
+
 
 def call_llm_json(*args, **kwargs) -> dict:
     content = call_llm(*args, **kwargs)
@@ -56,7 +107,9 @@ def call_llm_json(*args, **kwargs) -> dict:
             return json.loads(m.group())
         raise ValueError(f"LLM return non-JSON: {content[:200]}")
 
-def generate_keywords(product_url: str, product_name: str = "") -> List[str]:
+
+def generate_keywords(product_url: str, product_name: str = "",
+                      provider: str = DEFAULT_PROVIDER) -> List[str]:
     """根据产品信息生成 CSDN 搜索关键词"""
     sys_prompt = """你是关键词研究专家。根据产品信息生成适合CSDN（中国开发者社区）搜索的关键词。
 要求：5-10个中文关键词，覆盖产品类型、技术栈、应用场景、行业痛点。输出JSON数组。"""
@@ -65,7 +118,7 @@ def generate_keywords(product_url: str, product_name: str = "") -> List[str]:
 
 生成5-10个CSDN搜索关键词，中文。输出JSON数组格式。"""
     try:
-        resp = call_llm(prompt, sys_prompt, temperature=0.3)
+        resp = call_llm(prompt, sys_prompt, temperature=0.3, provider=provider)
         data = json.loads(resp)
         if isinstance(data, list):
             return data
@@ -77,19 +130,21 @@ def generate_keywords(product_url: str, product_name: str = "") -> List[str]:
     with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config/keywords.json")) as f:
         return json.load(f).get("seed_keywords", ["AI", "工具", "效率"])
 
+
 def generate_comments_batch(articles: List[Dict], product_url: str,
-                            product_name: str = "") -> List[Dict]:
+                            product_name: str = "",
+                            provider: str = DEFAULT_PROVIDER) -> List[Dict]:
     """
     批量生成评论（一次LLM调用，节省token）
-    
+
     Args:
         articles: [{"title": "标题", "url": "链接", "content": "内容片段"}]
         product_url: 产品链接
         product_name: 产品名称
+        provider: LLM 提供商
     Returns:
         [{"article_url": "链接", "comment": "评论内容"}]
     """
-    # 传干净URL给LLM（不带追踪参数）
     def clean_url(u):
         return u.split("?")[0].split("#")[0].rstrip("/")
     articles_text = "\n\n".join([
@@ -121,23 +176,20 @@ def generate_comments_batch(articles: List[Dict], product_url: str,
 """
 
     try:
-        resp = call_llm(prompt, sys_prompt, temperature=0.8, max_tokens=8000)
+        resp = call_llm(prompt, sys_prompt, temperature=0.8, max_tokens=8000, provider=provider)
         comments = _parse_llm_comments(resp)
         print(f"[INFO] LLM 返回 {len(comments)} 条原始评论")
 
         if not comments:
             return []
 
-        # ── 多策略 URL 匹配 ──────────────────────────────
         def normalize_url(u):
             return (u or "").split("?")[0].split("#")[0].rstrip("/")
 
         def extract_article_id(u):
-            """从 CSDN URL 提取文章 ID，如 /details/161263908 → 161263908"""
             m = re.search(r'/details/(\d+)', u)
             return m.group(1) if m else ""
 
-        # 构建索引：article_id → 原始带参URL
         article_id_map = {}
         url_to_article = {}
         for i, a in enumerate(articles):
@@ -154,17 +206,14 @@ def generate_comments_batch(articles: List[Dict], product_url: str,
             cu = normalize_url(raw_url)
             matched_url = None
 
-            # 策略1: 归一化 URL 精确匹配
             if cu in url_to_article:
                 matched_url = url_to_article[cu]
 
-            # 策略2: 按文章 ID 匹配（忽略域名、路径前缀差异）
             if not matched_url:
                 nid = extract_article_id(raw_url)
                 if nid and nid in article_id_map:
                     matched_url = article_id_map[nid]
 
-            # 策略3: 位置回退（按评论顺序对应文章顺序）
             if not matched_url and len(result) < len(articles):
                 matched_url = articles[len(result)]["url"]
 
@@ -182,34 +231,25 @@ def generate_comments_batch(articles: List[Dict], product_url: str,
 
 
 def _parse_llm_comments(raw: str) -> list:
-    """
-    鲁棒解析 LLM 返回的评论 JSON。
-    处理 LLM 常见的格式问题：markdown 代码块包裹、dict 包装、JSONDecodeError。
-    """
     text = raw.strip()
 
-    # 去掉 markdown 代码块包裹
     m = re.match(r'```(?:json)?\s*\n(.*?)\n```', text, re.DOTALL)
     if m:
         text = m.group(1).strip()
 
-    # 直接解析
     try:
         data = json.loads(text)
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
-            # LLM 可能包了一层：{"comments": [...]} 或直接在 values 里找列表
             for v in data.values():
                 if isinstance(v, list):
                     return v
-            # 包了一层对象，直接取这个对象（单条评论）
             if "article_url" in data or "comment" in data:
                 return [data]
     except (json.JSONDecodeError, Exception):
         pass
 
-    # 正则兜底：提取 JSON 数组
     m = re.search(r'\[.*\]', text, re.DOTALL)
     if m:
         try:
