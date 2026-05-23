@@ -2,7 +2,7 @@
 name: csdn-acquisition
 description: |
   CSDN 平台获客技能
-  功能：评论区获客
+  功能：评论区获客 + 文章发布（BW浏览器自动化）
   基于 BrowserWing 实现浏览器自动化 + DeepSeek API 驱动 AI 内容生成
 metadata:
   openclaw:
@@ -10,7 +10,7 @@ metadata:
     requires:
       env: ["BROWSERWING_EXECUTOR_URL", "DEEPSEEK_API_KEY"]
     category: "acquisition"
-    tags: ["csdn", "acquisition", "comment", "browserwing", "ai"]
+    tags: ["csdn", "acquisition", "comment", "publish", "browserwing", "ai"]
 ---
 
 # CSDN 平台获客技能 (csdn-acquisition)
@@ -22,7 +22,7 @@ AI 驱动的 CSDN 技术社区获客解决方案。
 | 功能 | 状态 | 说明 |
 |------|------|------|
 | 🎯 评论区获客 | ✅ 可用 | 关键词搜索 → 文章列表 → 批量LLM评论 → BW评论 |
-| 📝 文章自动化 | ⏳ 待实现 | - |
+| 📝 文章发布 | ✅ 可用 | LLM生成 → BW浏览器自动化发布 |
 
 ## 依赖
 
@@ -32,8 +32,11 @@ AI 驱动的 CSDN 技术社区获客解决方案。
 - BrowserWing 注册脚本：
   - `fd1119b5-2546-4791-8efb-76f7d865a1e1` — CSDN 搜索文章
   - `23d2a4a9-97d2-4d9c-821b-9ec2e2dd07f7` — CSDN 文章评论
+  - `csdn-publish-article-v1` — CSDN 文章发布（需 BW 注册）
 
 ## 快速使用
+
+### 评论区获客
 
 ```bash
 # 完整流程：生成关键词 → 搜索 → 过滤 → 批量评论
@@ -47,6 +50,40 @@ python3 scripts/csdn_campaign.py --acquire --product-url "https://ai.hcrzx.com" 
 
 # 限制评论数
 python3 scripts/csdn_campaign.py --acquire --product-url "https://ai.hcrzx.com" --max-comments 3
+```
+
+### 文章发布
+
+```bash
+# 生成文章并发布（BW浏览器需已登录CSDN）
+python3 scripts/csdn_campaign.py --publish -t "Python异步编程实战指南" -s "技术教程"
+
+# Dry-run 测试
+python3 scripts/csdn_campaign.py --publish -t "Docker入门" --dry-run
+
+# 仅生成文章保存到文件
+python3 scripts/csdn_campaign.py --gen-article "Kubernetes编排实践"
+
+# 从文件发布
+python3 scripts/csdn_campaign.py --publish -f data/article_*.json
+```
+
+### 发布模块独立使用
+
+```bash
+python3 scripts/csdn_publish.py "Go语言并发模式" -s "经验总结"
+python3 scripts/csdn_publish.py --topic-only "Python异步编程"    # 只生成不发布
+```
+
+## 文章发布流程
+
+```
+[1. LLM生成] → 标题/内容/标签/分类/Markdown全文（1500-3000字）
+      ↓
+[2. BW发布] → 调用BW脚本打开CSDN编辑器
+                填入内容 → 点击"发布文章"
+      ↓
+[3. 结果] → BW返回文章URL
 ```
 
 ## 评论区获客流程
@@ -79,8 +116,9 @@ python3 scripts/csdn_campaign.py --acquire --product-url "https://ai.hcrzx.com" 
 csdn-acquisition/
 ├── SKILL.md                       ← 本文
 ├── scripts/
-│   ├── csdn_campaign.py           ← 统一编排入口
+│   ├── csdn_campaign.py           ← 统一编排入口（--acquire / --publish / --gen-article）
 │   ├── csdn_comment_acquisition.py ← 评论区获客模块
+│   ├── csdn_publish.py            ← 文章发布模块（LLM生成 + BW发布）
 │   └── csdn_llm.py                ← LLM API 封装
 ├── templates/
 │   ├── comment-prompt.md           ← 评论生成提示词
@@ -89,7 +127,9 @@ csdn-acquisition/
 │   ├── keywords.json               ← 种子关键词
 │   └── filter.json                 ← 风控配置
 ├── bw-scripts/
-│   └── csdn-search.json            ← BW 搜索脚本参考
+│   ├── csdn-search.json            ← BW 搜索脚本参考
+│   ├── csdn-comment.json           ← BW 评论脚本参考
+│   └── csdn-publish-article.json   ← BW 文章发布脚本定义
 └── data/                           ← 运行时数据（评论历史）
 ```
 

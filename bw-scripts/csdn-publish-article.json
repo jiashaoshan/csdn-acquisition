@@ -1,0 +1,59 @@
+{
+  "id": "csdn-publish-article-v1",
+  "name": "CSDN文章发布",
+  "description": "通过BW浏览器自动化发布CSDN文章",
+  "url": "https://mp.csdn.net/mp_blog/creation/editor",
+  "actions": [
+    {
+      "type": "sleep",
+      "duration": 5000
+    },
+    {
+      "type": "execute_js",
+      "js_code": "(()=>{const cm=document.querySelector('.CodeMirror');let ta=null;if(cm&&cm.CodeMirror)ta=cm.CodeMirror.getInputField();if(!ta)ta=document.querySelector('textarea');if(ta){ta.id='csdn-editor-cm';ta.style.cssText='position:fixed;top:0;left:0;width:100%;height:600px;opacity:0.01;z-index:9999;'}const ti=document.createElement('input');ti.type='text';ti.id='csdn-data-title';ti.style.cssText='position:fixed;top:0;left:0;width:0;height:0;opacity:0;z-index:-1;';document.body.appendChild(ti);return JSON.stringify({ta:!!ta})})()"
+    },
+    {
+      "type": "sleep",
+      "duration": 500
+    },
+    {
+      "type": "input",
+      "selector": "#csdn-editor-cm",
+      "value": "${内容}"
+    },
+    {
+      "type": "input",
+      "selector": "#csdn-data-title",
+      "value": "${标题}"
+    },
+    {
+      "type": "sleep",
+      "duration": 1000
+    },
+    {
+      "type": "execute_js",
+      "js_code": "(()=>{const ti=document.querySelector('#csdn-data-title');if(ti&&ti.value){const cs=['#article-title','[contenteditable]','.article-title','div[class*=title]'];for(let s of cs){let el=document.querySelector(s);if(el){if(el.tagName==='INPUT'||el.tagName==='TEXTAREA'){el.value=ti.value}else{el.textContent=ti.value}try{el.dispatchEvent(new Event('input',{bubbles:true}))}catch(e){}break}}}const ta=document.querySelector('#csdn-editor-cm');if(ta){const cm=document.querySelector('.CodeMirror');if(cm&&cm.CodeMirror)cm.CodeMirror.setValue(ta.value)}return 'ok'})()"
+    },
+    {
+      "type": "sleep",
+      "duration": 2000
+    },
+    {
+      "type": "click",
+      "selector": ".btn-publish",
+      "duration": 1000
+    },
+    {
+      "type": "sleep",
+      "duration": 10000
+    },
+    {
+      "type": "execute_js",
+      "js_code": "(()=>{return JSON.stringify({url:window.location.href,title:document.title,is_editor:window.location.href.includes('/creation/editor')})})()"
+    }
+  ],
+  "variables": {
+    "标题": "",
+    "内容": ""
+  }
+}

@@ -9,35 +9,59 @@
 | 功能 | 状态 | 说明 |
 |------|------|------|
 | 🎯 **评论区获客** | ✅ 可用 | 关键词搜索 → 文章列表 → 批量LLM评论 → BW评论 |
-| 📝 **CSDN 文章发布** | ⏳ 待实现 | - |
+| 📝 **文章发布** | ✅ 可用 | LLM生成 → BW浏览器自动化发布 |
 
 ---
 
 ## 系统架构
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                  入口层 csdn_campaign.py               │
-│  --acquire（评论区获客）                               │
-└──────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌──────────────────────────────────────────────────────┐
-│             csdn_comment_acquisition.py                │
-│                                                        │
-│  1. 关键词生成 (LLM) → 2. BW搜索 → 3. 历史去重        │
-│  4. 批量评论生成 (LLM, 一次调用) → 5. BW评论 + 反爬    │
-└──────────────────────────────────────────────────────┘
-                          │
-              ┌───────────┴───────────┐
-              ▼                       ▼
-┌──────────────────┐   ┌──────────────────────────┐
-│    csdn_llm.py    │   │   BrowserWing (8080)      │
-│  DeepSeek API 封装 │   │                           │
-│  - 关键词生成      │   │  fd1119b5 → 搜索CSDN文章  │
-│  - 批量评论生成    │   │  23d2a4a9 → 发表评论      │
-└──────────────────┘   └──────────────────────────┘
+                                   csdn_campaign.py
+                          ┌─────────────────────────────┐
+                          │  --acquire    --publish       │
+                          │  --gen-article                │
+                          └─────────────────────────────┘
+                                │                │
+                ┌───────────────┘                └───────────────┐
+                ▼                                                ▼
+  csdn_comment_acquisition.py                         csdn_publish.py
+  ┌──────────────────────────────┐      ┌──────────────────────────────┐
+  │ 1. 关键词生成 → 2. BW搜索    │      │ 1. LLM生成文章               │
+  │ 3. 历史去重 → 4. LLM批量评论 │      │ 2. BW打开编辑器填入内容      │
+  │ 5. BW逐条评论 + 反爬延迟     │      │ 3. BW点击发布                │
+  └──────────────────────────────┘      └──────────────────────────────┘
+                │                                │
+                └────────────┬───────────────────┘
+                             ▼
+                   BrowserWing (8080)
+             ┌──────────────────────────┐
+             │ fd1119b5 → 搜索CSDN文章  │
+             │ 23d2a4a9 → 发表评论      │
+             │ csdn-publish-article-v1  │
+             │          → 发布文章       │
+             └──────────────────────────┘
+                        ▲
+             ┌──────────┘
+             ▼
+     csdn_llm.py (DeepSeek API)
 ```
+
+---
+
+## 文章发布流程
+
+```
+[1. LLM生成文章] → 标题/内容/标签/分类/Markdown全文（1500-3000字）
+      ↓
+[2. BW发布] → 调用BW脚本打开CSDN编辑器页面
+      │            填入标题 / 内容 / 标签 / 分类
+      ↓
+[3. 点击发布] → BW自动点击"发布文章"按钮
+      ↓
+[4. 结果] → BW返回文章URL
+```
+
+> 基于 BW 浏览器自动化。BW 浏览器需已登录 CSDN。
 
 ---
 
@@ -99,6 +123,7 @@ pip install requests
 |---------|------|------|
 | `fd1119b5-2546-4791-8efb-76f7d865a1e1` | CSDN 关键词搜索文章 | `{"关键词": "..."}` |
 | `23d2a4a9-97d2-4d9c-821b-9ec2e2dd07f7` | CSDN 文章评论 | `{"内容": "...", "链接": "..."}` |
+| `csdn-publish-article-v1` | CSDN 文章发布（BW浏览器自动化） | `{"标题": "...", "内容": "..."}` |
 
 脚本 JSON 定义见 `bw-scripts/` 目录。
 
@@ -138,6 +163,8 @@ pip install requests
 
 ## 快速开始
 
+### 评论区获客
+
 ```bash
 # 完整流程：生成关键词 → 搜索 → 过滤 → 批量生成评论 → 逐条评论
 python3 scripts/csdn_campaign.py \
@@ -164,6 +191,55 @@ python3 scripts/csdn_campaign.py \
   --max-comments 3
 ```
 
+### 文章发布
+
+```bash
+# 生成文章并发布
+python3 scripts/csdn_campaign.py \
+  --publish \
+  -t "Python异步编程实战指南" \
+  -s "技术教程"
+
+# Dry-run 测试（不实际发布）
+python3 scripts/csdn_campaign.py \
+  --publish \
+  -t "Docker入门" \
+  --dry-run
+
+# 仅生成文章保存到json，手动检查后再发布
+python3 scripts/csdn_campaign.py --gen-article "Kubernetes编排实践"
+python3 scripts/csdn_campaign.py --publish -f "data/article_*.json"
+
+# 直接使用发布模块
+python3 scripts/csdn_publish.py "深度学习模型部署优化" -s "经验总结"
+python3 scripts/csdn_publish.py --topic-only "Go语言并发模式"
+```
+
+## 参数
+
+### 评论区获客
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `-u, --product-url` | 产品链接（必填） | 环境变量 `CSDN_PRODUCT_URL` |
+| `-n, --product-name` | 产品名称 | 环境变量 `CSDN_PRODUCT_NAME` |
+| `-k, --keywords` | 关键词（逗号分隔） | LLM生成 |
+| `-m, --max-comments` | 最多评论数 | 从配置文件读取 |
+
+### 文章发布
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `-t, --topic` | 文章主题 | - |
+| `-s, --style` | 文章风格（技术教程/行业分析/经验总结等） | 技术教程 |
+| `-f, --file` | 从JSON文件读取文章发布 | - |
+
+### 通用参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--dry-run` | 仅测试不执行 | 否 |
+
 ---
 
 ## 文件结构
@@ -173,18 +249,20 @@ csdn-acquisition/
 ├── SKILL.md                           ← OpenClaw 技能描述
 ├── README.md                          ← 本文
 ├── scripts/
-│   ├── csdn_campaign.py               ← 统一编排入口
+│   ├── csdn_campaign.py               ← 统一编排入口（--acquire / --publish / --gen-article）
 │   ├── csdn_comment_acquisition.py    ← 评论区获客核心
 │   │   ├ LLM关键词 → BW搜索 → 过滤历史
 │   │   ├ 批量生成评论（一次LLM调用，省token）
 │   │   └ BW逐条评论 + 反爬延迟 + 速率限制
+│   ├── csdn_publish.py                ← 文章发布（LLM生成 + BW发布）
 │   └── csdn_llm.py                    ← LLM封装
 ├── templates/
 │   ├── comment-prompt.md               ← 评论生成提示词
 │   └── keyword-generation.md           ← 关键词生成提示词
 ├── bw-scripts/
 │   ├── csdn-search.json                ← BW搜索脚本定义
-│   └── csdn-comment.json               ← BW评论脚本定义
+│   ├── csdn-comment.json               ← BW评论脚本定义
+│   └── csdn-publish-article.json       ← BW文章发布脚本定义
 ├── config/
 │   ├── keywords.json                   ← 种子关键词
 │   └── filter.json                     ← 风控配置
@@ -205,4 +283,4 @@ csdn-acquisition/
 - [x] BW 评论脚本成功发表
 - [x] 反爬策略：随机延迟 + 日/小时上限
 - [x] Json 持久化评论历史
-- [ ] CSDN 文章自动编写（待实现）
+- [x] CSDN 文章自动编写（LLM生成 + BW浏览器自动化发布）
